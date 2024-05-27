@@ -2,9 +2,11 @@ import app from "./app"; //Contiene el servidor de express
 import { sequelize } from "./config/config.mysql";
 import { createServer } from "http";
 import WebSocket, { Server } from "ws";
+import { Request, Response } from "express";
 
 // let asientosVendidos = 0;
 let usuariosConectados = 0;
+let respuestasPendientes: Response[] = [];
 
 // Inicializar sillas
 let sillas = [
@@ -34,24 +36,27 @@ wss.on('connection', (ws: WebSocket) => {
   // ws.send(`Usuario: ${usuariosConectados}`)
 
   // Se envia el estado de las sillas al nuevo cliente.
-  ws.send(JSON.stringify({type: 'init', sillas}))
+  ws.send(JSON.stringify({ type: 'init', sillas }))
 
   ws.on('message', (message: string) => {
     const parsedMessage = JSON.parse(message);
     console.log('Received:', parsedMessage);
-    
+
     if (parsedMessage.type === 'comprar') {
       const { id } = parsedMessage;
       const silla = sillas.find(silla => silla.id === id);
       if (silla && !silla.comprado) {
         silla.comprado = true;
-        
+
         // Enviar actualización a todos los clientes conectados
         wss.clients.forEach(client => {
           if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'update', sillas }));
           }
         });
+
+        // responder a los clientes que esperan una nueva notificacion
+        responderClientes();
       }
     }
   });
@@ -60,7 +65,7 @@ wss.on('connection', (ws: WebSocket) => {
     console.log('Client disconnected');
     usuariosConectados -= 1;
   });
-  
+
   ws.on('error', (error) => {
     usuariosConectados -= 1;
     console.error('WebSocket error:', error);
@@ -72,17 +77,30 @@ app.get('/api/userOnline', (_req, res) => {
   res.json({ usuariosConectados });
 });
 
+app.get('/api/sillasVendidas', (_req: Request, res: Response) => {
+  respuestasPendientes.push(res)
+});
+
+function responderClientes() {
+  for (const res of respuestasPendientes) {
+    const sillasVendidas = sillas.filter(silla => silla.comprado).length;
+    res.status(200).json({ sillasVendidas });
+  }
+
+  respuestasPendientes = [];
+}
+
 const PORT = 3000;
 
 (async () => {
-    try {
-      await sequelize.authenticate();
-      await sequelize.sync();
-      console.log('Database connected');
-      server.listen(PORT, () => {
-        console.log(`Server is running on port ${PORT}`);
-      });
-    } catch (error) {
-      console.error('Unable to connect to the database:', error);
-    }
+  try {
+    await sequelize.authenticate();
+    await sequelize.sync();
+    console.log('Database connected');
+    server.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('Unable to connect to the database:', error);
+  }
 })();
