@@ -16,7 +16,10 @@ let sillas = [
   { id: 6, comprado: false },
   { id: 7, comprado: false },
   { id: 8, comprado: false },
-  { id: 9, comprado: false }
+  { id: 9, comprado: false },
+  { id: 10, comprado: false },
+  { id: 11, comprado: false },
+  { id: 12, comprado: false },
 ];
 
 // Creamos el servidor a partir de Express
