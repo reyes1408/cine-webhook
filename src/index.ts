@@ -8,6 +8,7 @@ import { Request, Response } from "express";
 let usuariosConectados = 0;
 let sseClients: Response[] = [];
 let userSseClients: Response[] = [];
+let registeredUrls: String[] = [];
 
 // Inicializar sillas
 let sillas = [
@@ -56,6 +57,8 @@ wss.on("connection", (ws: WebSocket) => {
           }
         });
 
+        //Notificamos a las URls registradas por medio de WebHook
+        notificarviaWebHook(id);
         // Enviar actualización a los clientes SSE
         enviarSSEClientes();
       }
@@ -122,6 +125,55 @@ function enviarSSEClientes() {
     console.log({ data: sillasVendidas });
   });
 }
+
+// ---- WebHooks ----
+
+// Notifica a los Cli por medio de WebHooks
+async function notificarviaWebHook(id: String) {
+
+  const promises = registeredUrls.map(url => {
+      const validUrl = String(url).trim();
+      fetch(validUrl, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              
+          },
+          body: JSON.stringify({
+            notificacion: "Nueva silla comprada.",
+            idsilla: id
+          })
+      })
+      .then(response => {
+          if (!response.ok) {
+              throw new Error(`Error al reenviar la información a ${url}: ${response.statusText}`);
+          }
+          console.log(`Se notifica a la direccion [${url}]`);
+      })
+      .catch(error => {
+          console.error(`Error al responder la información via Webhook a ${url}. \nError: ${error.message}`);
+      })
+  });
+  await Promise.all(promises);
+}
+
+// Ruta para ver las URLs registradas
+app.get('/register', (_: Request, res: Response) => {
+    
+  res.status(200).send({urls: registeredUrls});  
+});
+
+// Ruta para registrar una nueva URL
+app.post('/register', (req: Request, res: Response) => {
+  const { url } = req.body;
+
+  if (url && !registeredUrls.includes(url)) {
+      registeredUrls.push(url);
+      res.status(200).send(`URL [${url}] registra.`);
+  } else {
+      res.status(400).send('URL invalida o ya esta registrada.');
+  }
+});
 
 const PORT = 3000;
 
